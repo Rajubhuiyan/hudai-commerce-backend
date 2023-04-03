@@ -1,12 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const jwt_decode = require('jwt-decode');
+const uuid = require('uuid');
+
 const { MongoClient, ObjectId } = require('mongodb');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 4200;
-const uri ="mongodb+srv://hudaicommerce:DUjNi4GLNHE3Mg1p@hudai-commerce.atat27x.mongodb.net/?retryWrites=true&w=majority"
+const uri = "mongodb+srv://hudaicommerce:DUjNi4GLNHE3Mg1p@hudai-commerce.atat27x.mongodb.net/?retryWrites=true&w=majority"
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -15,6 +18,32 @@ const connectToMongoDB = async () => {
     const client = await MongoClient.connect(uri, { useNewUrlParser: true, useUnifiedTopology: true });
     return client.db('hudaiCommerce');
 };
+
+
+
+
+
+
+
+
+
+
+// deconde token
+function decodeToken(token) {
+    try {
+        // Verify the token and decode the payload
+        const decoded = jwt_decode(token);
+
+        // Return the decoded payload
+        return decoded;
+    } catch (error) {
+        console.error(error);
+        return null; // Return null if the token is invalid or the verification fails
+    }
+}
+
+
+
 
 app.get('/products', async (req, res) => {
     try {
@@ -75,13 +104,84 @@ app.post('/products', async (req, res) => {
 
         const insertedIds = Object.values(result.insertedIds);
         const insertedProducts = await db.collection('products').find({ _id: { $in: insertedIds } }).toArray();
-        console.log(insertedProducts);
+
         res.send(insertedProducts);
     } catch (error) {
         console.error(error);
         res.status(500).send({ message: "Failed to add products" });
     }
 });
+
+
+
+
+
+
+//  product category 
+
+app.get('/productsCategory', async (req, res) => {
+
+    // /productsCategory?pageSize=20&pageNumber=2 api link will be this
+
+
+    try {
+        const token = req.headers.authorization;
+
+        if (!token?.startsWith("Bearer ey")) {
+            res.status(401).json({ message: 'Unauthorized Login', statusCode: 401 });
+            return
+        }
+        if (token?.startsWith("Bearer ey")) {
+            const decodeData = decodeToken(token)
+            const catgoryAccess = ["ROLE_OWNER", "ROLE_ADMIN",]
+            if (decodeData && catgoryAccess.includes(decodeData.role)) {
+                const db = await connectToMongoDB();
+                const pageSize = parseInt(req.query.pageSize) || 10; // default page size is 10
+                const pageNumber = parseInt(req.query.pageNumber) || 1; // default page number is 1
+
+                const startIndex = (pageNumber - 1) * pageSize;
+                const endIndex = pageNumber * pageSize;
+                const name = req.query.name;
+ 
+                const query = name ? { 'name' : { '$regex' : name, '$options' : 'i' } } : {};
+ 
+
+                console.log(name)
+                const productsCategory = await db.collection('productsCategory').find(query).skip(startIndex).limit(pageSize).toArray();
+                const totalElements = await db.collection('productsCategory').countDocuments(query); // count total number of products
+                const totalPages = Math.ceil(totalElements / pageSize); // calculate total number of pages
+
+                res.status(200).json({
+                    value: productsCategory,
+                    totalElements: totalElements,
+                    totalPages: totalPages
+                });
+                return;
+            }
+            res.status(401).json({ message: 'Unauthorized Login', statusCode: 401 });
+            return
+        }
+    } catch (err) {
+        res.status(400).json({ message: 'Bad request', statusCode: 400 });
+    }
+
+});
+
+
+app.post('/productsCategory', async (req, res) => {
+
+
+    try {
+
+        const db = await connectToMongoDB();
+
+
+    } catch (err) {
+        res.status(400).json({ message: 'Bad request', statusCode: 400 });
+    }
+
+});
+
 
 app.get('/', (req, res) => {
     res.send('Hello World!')
