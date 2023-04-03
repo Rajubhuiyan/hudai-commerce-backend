@@ -118,10 +118,10 @@ app.post('/products', async (req, res) => {
 
 
 //  product category 
-
+// get data
 app.get('/productsCategory', async (req, res) => {
 
-    // /productsCategory?pageSize=20&pageNumber=2 api link will be this
+    // /productsCategory?name=computers&pageSize=20&pageNumber=2 api link will be this
 
 
     try {
@@ -142,9 +142,9 @@ app.get('/productsCategory', async (req, res) => {
                 const startIndex = (pageNumber - 1) * pageSize;
                 const endIndex = pageNumber * pageSize;
                 const name = req.query.name;
- 
-                const query = name ? { 'name' : { '$regex' : name, '$options' : 'i' } } : {};
- 
+
+                const query = name ? { 'name': { '$regex': name, '$options': 'i' } } : {};
+
 
                 console.log(name)
                 const productsCategory = await db.collection('productsCategory').find(query).skip(startIndex).limit(pageSize).toArray();
@@ -168,19 +168,138 @@ app.get('/productsCategory', async (req, res) => {
 });
 
 
+// post data
 app.post('/productsCategory', async (req, res) => {
 
 
+
     try {
+        const token = req.headers.authorization;
 
-        const db = await connectToMongoDB();
+        if (!token?.startsWith("Bearer ey")) {
+            res.status(401).json({ message: 'Unauthorized Login', statusCode: 401 });
+            return
+        }
+        if (token?.startsWith("Bearer ey")) {
+            const decodeData = decodeToken(token)
+            const catgoryAccess = ["ROLE_OWNER", "ROLE_ADMIN",]
+            if (decodeData && catgoryAccess.includes(decodeData.role)) {
+                const db = await connectToMongoDB();
+                const bodyData = req.body;
 
 
+                if (!Array.isArray(bodyData)) {
+                    res.status(422).json({ message: 'Data must be in array format.', statusCode: 422 });
+                    return
+                }
+
+                const error = []
+
+                for (let i = 0; i < bodyData.length; i++) {
+                    const category = bodyData[i];
+                    let isError = false
+                    if (!category.name) {
+                        error.push({ message: 'Name is required', statusCode: 422 })
+                        isError = true
+                    }
+                    if (!category.slug) {
+                        error.push({ message: 'Slug is required', statusCode: 422 })
+                        isError = true
+                    }
+                    if (!category.image) {
+                        error.push({ message: 'Image is required', statusCode: 422 })
+                        isError = true
+                    }
+
+                    if (isError) {
+                        break
+                    }
+
+                }
+                if (error.length > 0) {
+                    res.status(422).json(error);
+                    return
+                }
+
+                const result = await db.collection('productsCategory').insertMany(bodyData);
+                const insertedIds = Object.values(result.insertedIds);
+                const insertedCategory = await db.collection('productsCategory').find({ _id: { $in: insertedIds } }).toArray();
+
+                res.status(200).json({
+                    value: insertedCategory,
+                    statusCode: 200,
+                    message: "products category inserted"
+                });
+
+
+            }
+            res.status(401).json({ message: 'Unauthorized Login', statusCode: 401 });
+            return
+        }
     } catch (err) {
         res.status(400).json({ message: 'Bad request', statusCode: 400 });
     }
 
 });
+
+
+
+
+// post data
+app.delete('/productsCategory/:deleteId', async (req, res) => {
+
+    try {
+        const token = req.headers.authorization;
+
+        if (!token?.startsWith("Bearer ey")) {
+            res.status(401).json({ message: 'Unauthorized Login', statusCode: 401 });
+            return
+        }
+        if (token?.startsWith("Bearer ey")) {
+            const decodeData = decodeToken(token)
+            const catgoryAccess = ["ROLE_OWNER", "ROLE_ADMIN",]
+            if (decodeData && catgoryAccess.includes(decodeData.role)) {
+                const db = await connectToMongoDB();
+                const { deleteId } = req.params;
+
+                if (!deleteId) {
+                    res.status(422).json({ "message": "Delete id is required", statusCode: 422 });
+                    return
+                }
+                const findData = await db.collection("productsCategory").findOne({ "_id": new ObjectId(`${deleteId}`) })
+
+                if (!findData) {
+                    res.status(404).json({ message: 'Product category Not found', statusCode: 404 });
+                    return
+                }
+
+                const deletedData = await db.collection("productsCategory").deleteOne({ "_id": new ObjectId(`${deleteId}`) }) 
+
+                if (deletedData.deletedCount) {
+                    res.status(200).json({
+                        value: findData,
+                        statusCode: 200,
+                        message: "Products category deleted"
+                    });
+                }
+                res.status(400).json({ message: 'Internal server error', statusCode: 500 });
+                return
+
+
+
+
+            }
+            res.status(401).json({ message: 'Unauthorized Login', statusCode: 401 });
+            return
+        }
+    } catch (err) {
+        console.log(err)
+        res.status(400).json({ message: 'Bad request', statusCode: 400 });
+    }
+
+});
+
+
 
 
 app.get('/', (req, res) => {
