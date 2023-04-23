@@ -245,7 +245,7 @@ app.post('/productsCategory', async (req, res) => {
 
 
 
-// post data
+// delete data
 app.delete('/productsCategory/:deleteId', async (req, res) => {
 
     try {
@@ -273,7 +273,7 @@ app.delete('/productsCategory/:deleteId', async (req, res) => {
                     return
                 }
 
-                const deletedData = await db.collection("productsCategory").deleteOne({ "_id": new ObjectId(`${deleteId}`) }) 
+                const deletedData = await db.collection("productsCategory").deleteOne({ "_id": new ObjectId(`${deleteId}`) })
 
                 if (deletedData.deletedCount) {
                     res.status(200).json({
@@ -294,6 +294,88 @@ app.delete('/productsCategory/:deleteId', async (req, res) => {
         }
     } catch (err) {
         console.log(err)
+        res.status(400).json({ message: 'Bad request', statusCode: 400 });
+    }
+
+});
+
+
+
+// update data
+app.put('/productsCategory/:updateId', async (req, res) => {
+
+
+
+    try {
+        const token = req.headers.authorization;
+
+        if (!token?.startsWith("Bearer ey")) {
+            res.status(401).json({ message: 'Unauthorized Login', statusCode: 401 });
+            return
+        }
+        if (token?.startsWith("Bearer ey")) {
+            const decodeData = decodeToken(token)
+            const catgoryAccess = ["ROLE_OWNER", "ROLE_ADMIN",]
+            if (decodeData && catgoryAccess.includes(decodeData.role)) {
+
+                const db = await connectToMongoDB();
+                const { updateId } = req.params;
+                const bodyData = req.body;
+                const existingData = await db.collection("productsCategory").findOne({ "_id": new ObjectId(`${updateId}`) }) 
+                if (Array.isArray(bodyData)) {
+                    res.status(422).json({
+                        statusCode: 422,
+                        message: "Array not acceptable.Body must be object"
+                    })
+                    return
+                } 
+
+                if (!existingData) {
+                    res.status(404).json({
+                        statusCode: 404,
+                        message: 'Data not found'
+                    })
+                    return
+                }
+
+                console.log(bodyData.isActive != undefined || bodyData.isActive != null ? bodyData.isActive : existingData.isActive || false)
+                if (bodyData && existingData) {
+                    const updateDoc = {
+                        $set: {
+                            "name": bodyData.name || existingData.name,
+                            "slug": bodyData.slug || existingData.slug,
+                            "description": bodyData.description || existingData.description,
+                            "image": bodyData.image || existingData.image,
+                            "parentCategoryId": bodyData.parentCategoryId || existingData.parentCategoryId,
+                            "isActive": bodyData.isActive != undefined || bodyData.isActive != null ? bodyData.isActive : existingData.isActive || false
+                        },
+                    };
+
+                    const result = await db.collection("productsCategory").updateOne({ "_id": new ObjectId(`${updateId}`) }, updateDoc)
+
+
+                    if (result.matchedCount > 0) {
+                        const updatedCat = await db.collection('productsCategory').findOne({ "_id": new ObjectId(`${updateId}`) })
+                        res.status(200).json({
+                            statusCode: 200,
+                            value: updatedCat,
+                            message: "Product category updated"
+                        })
+                        return;
+                    }
+                }
+                res.status(422).json({
+                    statusCode: 422,
+                    message: "Something went wrong"
+                })
+
+                return
+
+            }
+            res.status(401).json({ message: 'Unauthorized Login', statusCode: 401 });
+            return
+        }
+    } catch (err) {
         res.status(400).json({ message: 'Bad request', statusCode: 400 });
     }
 
